@@ -22,7 +22,7 @@ def download_image(url: str) -> Image.Image:
     """Baixa uma imagem da URL e retorna como objeto PIL"""
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
@@ -37,40 +37,42 @@ def criar_gradiente_overlay(largura: int, altura: int) -> Image.Image:
     """Cria um overlay com gradiente escuro na parte inferior"""
     overlay = Image.new("RGBA", (largura, altura), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    
+
     # Gradiente começa em 40% da altura
     inicio_gradiente = int(altura * 0.4)
-    
+
     for y in range(inicio_gradiente, altura):
         # Calcula opacidade progressiva (0 a 220)
         progresso = (y - inicio_gradiente) / (altura - inicio_gradiente)
         opacidade = int(220 * progresso)
         draw.rectangle([(0, y), (largura, y + 1)], fill=(0, 0, 0, opacidade))
-    
+
     return overlay
 
 
-def quebrar_texto(texto: str, fonte: ImageFont.FreeTypeFont, max_largura: int, draw: ImageDraw.Draw) -> list:
+def quebrar_texto(
+    texto: str, fonte: ImageFont.FreeTypeFont, max_largura: int, draw: ImageDraw.Draw
+) -> list:
     """Quebra o texto em múltiplas linhas que cabem na largura especificada"""
     palavras = texto.split()
     linhas = []
     linha_atual = ""
-    
+
     for palavra in palavras:
         teste = f"{linha_atual} {palavra}".strip()
         bbox = draw.textbbox((0, 0), teste, font=fonte)
         largura_texto = bbox[2] - bbox[0]
-        
+
         if largura_texto <= max_largura:
             linha_atual = teste
         else:
             if linha_atual:
                 linhas.append(linha_atual)
             linha_atual = palavra
-    
+
     if linha_atual:
         linhas.append(linha_atual)
-    
+
     return linhas
 
 
@@ -78,62 +80,62 @@ def gerar_card(
     imagem_url: str,
     categoria: str,
     titulo: str,
-    logo_path: str = None
+    logo_path: str = None,
 ) -> BytesIO:
     """
     Gera um card de notícia no estilo NotJournal/Arven
-    
-    Args:
-        imagem_url: URL da imagem de fundo
-        categoria: Categoria da notícia (ex: "MARKETING", "TECNOLOGIA")
-        titulo: Título/manchete da notícia
-        logo_path: Caminho para o arquivo da logo (opcional)
-    
-    Returns:
-        BytesIO: Buffer com a imagem PNG gerada
     """
-    
+
     # 1. Baixar e preparar imagem de fundo (SEM cortar, fazendo "fit")
     img_original = download_image(imagem_url).convert("RGBA")
-    
+
     # Redimensionar mantendo aspect ratio SEM cortar (encaixa dentro do card)
     scale = min(CARD_WIDTH / img_original.width, CARD_HEIGHT / img_original.height)
     new_width = int(img_original.width * scale)
     new_height = int(img_original.height * scale)
-    
-    img_redimensionada = img_original.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
-    # Criar fundo do tamanho exato do card (pode ser preto ou outra cor)
+
+    img_redimensionada = img_original.resize(
+        (new_width, new_height), Image.Resampling.LANCZOS
+    )
+
+    # Criar fundo do tamanho exato do card (preto)
     img_fundo = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), (0, 0, 0, 255))
-    
+
     # Centralizar a imagem redimensionada no card
     offset_x = (CARD_WIDTH - new_width) // 2
     offset_y = (CARD_HEIGHT - new_height) // 2
     img_fundo.paste(img_redimensionada, (offset_x, offset_y))
-    
+
     # 2. Aplicar overlay com gradiente
     overlay = criar_gradiente_overlay(CARD_WIDTH, CARD_HEIGHT)
     img_final = Image.alpha_composite(img_fundo, overlay)
-    
-    # 3. Adicionar logo (se existir) - logo maior
+
+    # 3. Adicionar logo (se existir) – tamanho parecido com o exemplo
     if logo_path and os.path.exists(logo_path):
         try:
             logo = Image.open(logo_path).convert("RGBA")
-            # Redimensionar logo mantendo proporção (max 260px de largura, por exemplo)
-            logo_max_width = 260
+
+            # Logo ocupa ~18% da largura do card (ajuste se quiser maior/menor)
+            logo_max_width = int(CARD_WIDTH * 0.18)
+
             if logo.width > logo_max_width:
                 ratio = logo_max_width / logo.width
                 logo = logo.resize(
                     (logo_max_width, int(logo.height * ratio)),
-                    Image.Resampling.LANCZOS
+                    Image.Resampling.LANCZOS,
                 )
-            img_final.paste(logo, (40, 40), logo)
+
+            # Posição mais para dentro, similar ao exemplo (topo esquerdo)
+            pos_x = int(CARD_WIDTH * 0.07)   # ~7% da largura como margem esquerda
+            pos_y = int(CARD_HEIGHT * 0.06)  # ~6% da altura como margem superior
+
+            img_final.paste(logo, (pos_x, pos_y), logo)
         except Exception as e:
             print(f"Erro ao carregar logo: {e}")
-    
+
     # 4. Preparar para desenhar texto
     draw = ImageDraw.Draw(img_final)
-    
+
     # Carregar fontes
     try:
         fonte_categoria = ImageFont.truetype(
@@ -146,121 +148,114 @@ def gerar_card(
         print(f"Erro ao carregar fontes, usando padrão: {e}")
         fonte_categoria = ImageFont.load_default()
         fonte_titulo = ImageFont.load_default()
-    
+
     margem = 40
     max_largura_texto = CARD_WIDTH - (margem * 2)
-    
+
     # 5. Desenhar categoria
     categoria_upper = categoria.upper()
     draw.text(
         (margem, CARD_HEIGHT - 280),
         categoria_upper,
         font=fonte_categoria,
-        fill=(255, 255, 255, 200)
+        fill=(255, 255, 255, 200),
     )
-    
+
     # Linha decorativa abaixo da categoria
-    bbox_cat = draw.textbbox((margem, CARD_HEIGHT - 280), categoria_upper, font=fonte_categoria)
+    bbox_cat = draw.textbbox(
+        (margem, CARD_HEIGHT - 280), categoria_upper, font=fonte_categoria
+    )
     largura_categoria = bbox_cat[2] - bbox_cat[0]
     draw.rectangle(
         [(margem, CARD_HEIGHT - 245), (margem + largura_categoria, CARD_HEIGHT - 242)],
-        fill=(255, 255, 255, 180)
+        fill=(255, 255, 255, 180),
     )
-    
+
     # 6. Desenhar título
     linhas_titulo = quebrar_texto(titulo, fonte_titulo, max_largura_texto, draw)
-    
+
     # Máximo 3 linhas
     linhas_titulo = linhas_titulo[:3]
-    if len(linhas_titulo) == 3 and len(quebrar_texto(titulo, fonte_titulo, max_largura_texto, draw)) > 3:
+    if len(linhas_titulo) == 3 and len(
+        quebrar_texto(titulo, fonte_titulo, max_largura_texto, draw)
+    ) > 3:
         # Adicionar "..." se truncou
         linhas_titulo[2] = linhas_titulo[2][:50] + "..."
-    
+
     y_titulo = CARD_HEIGHT - 220
     espacamento_linha = 60
-    
+
     for linha in linhas_titulo:
         draw.text(
             (margem, y_titulo),
             linha,
             font=fonte_titulo,
-            fill=(255, 255, 255)
+            fill=(255, 255, 255),
         )
         y_titulo += espacamento_linha
-    
+
     # 7. Converter para RGB e salvar em buffer
     img_final = img_final.convert("RGB")
-    
+
     buffer = BytesIO()
     img_final.save(buffer, format="PNG", quality=95)
     buffer.seek(0)
-    
+
     return buffer
 
 
 # ==================== ROTAS DA API ====================
 
+
 @app.route("/", methods=["GET"])
 def home():
     """Rota de health check"""
-    return jsonify({
-        "status": "ok",
-        "service": "Arven Card Generator",
-        "version": "1.0.0"
-    })
+    return jsonify(
+        {"status": "ok", "service": "Arven Card Generator", "version": "1.0.0"}
+    )
 
 
 @app.route("/gerar-card", methods=["POST"])
 def api_gerar_card():
     """
     Gera um card de notícia
-    
-    Body JSON:
-    {
-        "imagem_url": "https://...",
-        "categoria": "MARKETING",
-        "titulo": "Título da notícia aqui"
-    }
-    
-    Returns:
-        image/png
     """
     try:
         dados = request.get_json()
-        
+
         if not dados:
             return jsonify({"error": "JSON body é obrigatório"}), 400
-        
+
         imagem_url = dados.get("imagem_url")
         categoria = dados.get("categoria", "NOTÍCIA")
         titulo = dados.get("titulo")
-        
+
         if not titulo:
             return jsonify({"error": "Campo 'titulo' é obrigatório"}), 400
-        
+
         if not imagem_url:
             return jsonify({"error": "Campo 'imagem_url' é obrigatório"}), 400
-        
+
         # Caminho da logo (opcional)
         logo_path = os.path.join(ASSETS_DIR, "logo.png")
         if not os.path.exists(logo_path):
             logo_path = None
-        
+
         # Gerar card
         buffer = gerar_card(
             imagem_url=imagem_url,
             categoria=categoria,
             titulo=titulo,
-            logo_path=logo_path
+            logo_path=logo_path,
         )
-        
+
         return send_file(
             buffer,
             mimetype="image/png",
             as_attachment=False,
-            download_name="card.png"
+            download_name="card.png",
         )
-    
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -269,57 +264,45 @@ def api_gerar_card():
 def api_gerar_card_base64():
     """
     Gera um card e retorna em base64 (útil para n8n)
-    
-    Body JSON:
-    {
-        "imagem_url": "https://...",
-        "categoria": "MARKETING",
-        "titulo": "Título da notícia aqui"
-    }
-    
-    Returns:
-        JSON com campo "image_base64"
     """
     import base64
-    
+
     try:
         dados = request.get_json()
-        
+
         if not dados:
             return jsonify({"error": "JSON body é obrigatório"}), 400
-        
+
         imagem_url = dados.get("imagem_url")
         categoria = dados.get("categoria", "NOTÍCIA")
         titulo = dados.get("titulo")
-        
+
         if not titulo:
             return jsonify({"error": "Campo 'titulo' é obrigatório"}), 400
-        
+
         if not imagem_url:
             return jsonify({"error": "Campo 'imagem_url' é obrigatório"}), 400
-        
+
         # Caminho da logo (opcional)
         logo_path = os.path.join(ASSETS_DIR, "logo.png")
         if not os.path.exists(logo_path):
             logo_path = None
-        
+
         # Gerar card
         buffer = gerar_card(
             imagem_url=imagem_url,
             categoria=categoria,
             titulo=titulo,
-            logo_path=logo_path
+            logo_path=logo_path,
         )
-        
+
         # Converter para base64
         image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-        
-        return jsonify({
-            "success": True,
-            "image_base64": image_base64,
-            "mime_type": "image/png"
-        })
-    
+
+        return jsonify(
+            {"success": True, "image_base64": image_base64, "mime_type": "image/png"}
+        )
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -328,7 +311,7 @@ if __name__ == "__main__":
     # Criar diretórios se não existirem
     os.makedirs(FONTS_DIR, exist_ok=True)
     os.makedirs(ASSETS_DIR, exist_ok=True)
-    
+
     print("=" * 50)
     print("Arven Card Generator")
     print("=" * 50)
@@ -342,5 +325,5 @@ if __name__ == "__main__":
     print("  POST /gerar-card        → Retorna imagem PNG")
     print("  POST /gerar-card-base64 → Retorna JSON com base64")
     print("=" * 50)
-    
+
     app.run(host="0.0.0.0", port=5000, debug=True)
