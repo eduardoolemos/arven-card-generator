@@ -93,40 +93,34 @@ def gerar_card(
         BytesIO: Buffer com a imagem PNG gerada
     """
     
-    # 1. Baixar e preparar imagem de fundo
-    img_fundo = download_image(imagem_url)
+    # 1. Baixar e preparar imagem de fundo (SEM cortar, fazendo "fit")
+    img_original = download_image(imagem_url).convert("RGBA")
     
-    # Redimensionar mantendo aspect ratio e cortando para preencher
-    img_ratio = img_fundo.width / img_fundo.height
-    target_ratio = CARD_WIDTH / CARD_HEIGHT
+    # Redimensionar mantendo aspect ratio SEM cortar (encaixa dentro do card)
+    scale = min(CARD_WIDTH / img_original.width, CARD_HEIGHT / img_original.height)
+    new_width = int(img_original.width * scale)
+    new_height = int(img_original.height * scale)
     
-    if img_ratio > target_ratio:
-        # Imagem mais larga - ajusta pela altura
-        new_height = CARD_HEIGHT
-        new_width = int(new_height * img_ratio)
-    else:
-        # Imagem mais alta - ajusta pela largura
-        new_width = CARD_WIDTH
-        new_height = int(new_width / img_ratio)
+    img_redimensionada = img_original.resize((new_width, new_height), Image.Resampling.LANCZOS)
     
-    img_fundo = img_fundo.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    # Criar fundo do tamanho exato do card (pode ser preto ou outra cor)
+    img_fundo = Image.new("RGBA", (CARD_WIDTH, CARD_HEIGHT), (0, 0, 0, 255))
     
-    # Cortar para o centro
-    left = (new_width - CARD_WIDTH) // 2
-    top = (new_height - CARD_HEIGHT) // 2
-    img_fundo = img_fundo.crop((left, top, left + CARD_WIDTH, top + CARD_HEIGHT))
-    img_fundo = img_fundo.convert("RGBA")
+    # Centralizar a imagem redimensionada no card
+    offset_x = (CARD_WIDTH - new_width) // 2
+    offset_y = (CARD_HEIGHT - new_height) // 2
+    img_fundo.paste(img_redimensionada, (offset_x, offset_y))
     
     # 2. Aplicar overlay com gradiente
     overlay = criar_gradiente_overlay(CARD_WIDTH, CARD_HEIGHT)
     img_final = Image.alpha_composite(img_fundo, overlay)
     
-    # 3. Adicionar logo (se existir)
+    # 3. Adicionar logo (se existir) - logo maior
     if logo_path and os.path.exists(logo_path):
         try:
             logo = Image.open(logo_path).convert("RGBA")
-            # Redimensionar logo mantendo proporção (max 150px de largura)
-            logo_max_width = 150
+            # Redimensionar logo mantendo proporção (max 260px de largura, por exemplo)
+            logo_max_width = 260
             if logo.width > logo_max_width:
                 ratio = logo_max_width / logo.width
                 logo = logo.resize(
