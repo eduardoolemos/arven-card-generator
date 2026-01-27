@@ -13,7 +13,7 @@ app = Flask(__name__)
 
 # Configurações
 CARD_WIDTH = 1080
-CARD_HEIGHT = 1080
+CARD_HEIGHT = 1350
 FONTS_DIR = "fonts"
 ASSETS_DIR = "assets"
 
