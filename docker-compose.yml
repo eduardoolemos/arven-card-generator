@@ -5,11 +5,11 @@ services:
     image: python:3.11-slim
     ports:
       - "5000:5000"
-    working_dir: /app
-    volumes:
-      - ./:/app
     command: >
       bash -c "
-        pip install --no-cache-dir flask pillow requests gunicorn &&
-        gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 app:app
+        pip install flask pillow requests &&
+        cd /tmp &&
+        git clone https://github.com/eduardoolemos/arven-card-generator.git app &&
+        cd app &&
+        python app.py
       "
